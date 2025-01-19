@@ -34,6 +34,7 @@ async function main() {
 
   try {
     ({ sierraCode, casmCode } = await getCompiledCode(`game_SimpleVault`));
+    // ({ sierraCode, casmCode } = await getCompiledCode(`game_SimpleVault`));
     console.log("sierraCode=", sierraCode);
     console.log("casmCode=", casmCode);
   } catch (error: any) {
@@ -46,8 +47,15 @@ async function main() {
 
 
   const constructor = myCallData.compile("constructor", {
-    token:"0x69f9e638ea1cbdd33f85c2dafb09585b10d65b996d15898a419f93e30577ca0"
+    token:"0x36ca7e3d294a8579a515e6721f93ad0b6c007a11ba3a5e14159bef8f5bfd7f2"
   });
+  // const constructor = myCallData.compile("constructor", {
+  //   recipient: initialOwner,
+  //   name: "Caddy",
+  //   decimals: 18,
+  //   initial_supply: 100000000000,
+  //   symbol: "CDY"
+  // });
 
 
   const deployResponse = await account0.declareAndDeploy({

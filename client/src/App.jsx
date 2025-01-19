@@ -34,14 +34,13 @@ function App() {
     };
 
     try {
-      const tx = await newContract.deposit(1000000000000);
+      const tx = await newContract.withdraw(1000);
       console.log(">> tx", tx);
       console.log(">> txHash", tx.transaction_hash);
     } catch (error) {
       console.error("Transaction failed:", error);
     }
   }
-
   const movementY = async () => {
     const provider = new RpcProvider({
       nodeUrl:
@@ -60,11 +59,17 @@ function App() {
     console.log("contract details", newContract);
 
     try {
-      const tx = await newContract.withdraw(1);
-      console.log(">> tx", tx);
-      console.log(">> txHash", tx.transaction_hash);
+      const tx = await newContract.create_option("1",100,10);
+      await provider.waitForTransaction(tx.transaction_hash);
+      const receipt = await provider.getTransactionReceipt(tx.transaction_hash);
+      
+      // Get the option ID from the transaction events
+      const optionId = receipt.events[0].data[0]; // Assuming option ID is in first event
+      return optionId;
+
     } catch (error) {
       console.error("Transaction failed:", error);
+      return null;
     }
   };
 

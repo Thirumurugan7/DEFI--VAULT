@@ -50,6 +50,12 @@ pub trait ISimpleVault<TContractState> {
     fn get_option_details(self: @TContractState, option_id: u256) -> VaultOption;
     fn get_next_option_id(self: @TContractState) -> u256;
     fn get_total_locked_amount(self: @TContractState) -> u256;
+    fn get_user_total_deposits(self: @TContractState, user: ContractAddress) -> u256;
+    fn buy_option(
+        ref self: TContractState, 
+        option_id: u256, 
+        amount: u256
+    );
 }
  
 #[starknet::contract]
@@ -62,7 +68,7 @@ pub mod SimpleVault {
         StoragePointerWriteAccess,
     };
     const LOCK_PERIOD: u64 = 50; // 50 blocks lock period
-    const CREATION_INTERVAL: u64 = 25; // Create options every 25 blocks
+    const CREATION_INTERVAL: u64 = 5; // Create options every 5 blocks
     const LOCK_PERCENTAGE: u256 = 10; // 10% of tokens locked for options
 
 
@@ -76,7 +82,8 @@ pub mod SimpleVault {
         options: Map<u256, VaultOption>,
         next_option_id: u256,
         last_creation_block: u64,
-        total_locked_amount: u256
+        total_locked_amount: u256,
+        user_total_deposits: Map<ContractAddress, u256>,
     }
 
 
@@ -84,6 +91,10 @@ pub mod SimpleVault {
     #[constructor]
     fn constructor(ref self: ContractState, token: ContractAddress) {
         self.token.write(IERC20Dispatcher { contract_address: token });
+        self.next_option_id.write(1);
+        self.last_creation_block.write(0);
+        self.total_locked_amount.write(0);
+
     }
  
     #[generate_trait]
@@ -131,6 +142,11 @@ pub mod SimpleVault {
  
             PrivateFunctions::_mint(ref self, caller, shares);
  
+            // Track the deposit
+            let current_deposits = self.user_total_deposits.read(caller);
+            self.user_total_deposits.write(caller, current_deposits + amount);
+
+            // Continue with existing deposit logic
             let amount_felt252: felt252 = amount.low.into();
             self.token.read().transfer_from(caller, this, amount_felt252);
         }
@@ -149,6 +165,13 @@ pub mod SimpleVault {
  
             let balance = self.user_balance_of(this);
             let amount = (shares * balance) / self.total_supply.read();
+            
+            // Track the withdrawal
+            let current_deposits = self.user_total_deposits.read(caller);
+            if current_deposits >= amount {
+                self.user_total_deposits.write(caller, current_deposits - amount);
+            }
+
             PrivateFunctions::_burn(ref self, caller, shares);
             let amount_felt252: felt252 = amount.low.into();
             self.token.read().transfer(caller, amount_felt252);
@@ -239,6 +262,19 @@ pub mod SimpleVault {
             let mut option = self.options.read(option_id);
             assert(!option.exercised, 'Option already exercised');
             assert(!option.cancelled, 'Option already cancelled');
+
+            let current_block = get_block_number();
+            assert(
+                current_block > option.creation_block + LOCK_PERIOD,
+                'Still in lock period'
+            );
+
+            let caller = get_caller_address();
+            assert(caller == option.creator, 'Only creator can cancel');
+
+            option.cancelled = true;
+            self.total_locked_amount.write(self.total_locked_amount.read() - option.amount);
+            self.options.write(option_id, option);
         }
 
         fn get_option_details(self: @ContractState, option_id: u256) -> VaultOption {
@@ -252,9 +288,56 @@ pub mod SimpleVault {
         fn get_total_locked_amount(self: @ContractState) -> u256 {
             self.total_locked_amount.read()
         }
-      
 
-        
+        fn get_user_total_deposits(self: @ContractState, user: ContractAddress) -> u256 {
+            self.user_total_deposits.read(user)
+        }
+
+        fn buy_option(
+            ref self: ContractState, 
+            option_id: u256, 
+            amount: u256
+        ) {
+            // Get option details
+            let mut option = self.options.read(option_id);
+            
+            // Validate option state
+            assert(!option.exercised, 'Option already exercised');
+            assert(!option.cancelled, 'Option cancelled');
+            // Ensure requested amount doesn't exceed the available option amount
+            assert(amount <= option.amount, 'Amount exceeds available');
+            
+            let current_block = get_block_number();
+            assert(
+                current_block <= option.creation_block + option.expiry_blocks,
+                'Option expired'
+            );
+
+            let caller = get_caller_address();
+            let this = get_contract_address();
+
+            // Calculate and collect payment
+            let payment = amount * option.strike_price;
+            let payment_felt: felt252 = payment.try_into().unwrap();
+            
+            // Transfer payment from buyer to vault
+            self.token.read().transfer_from(caller, this, payment_felt);
+
+            // Update option state
+            if amount == option.amount {
+                option.exercised = true;
+                self.total_locked_amount.write(self.total_locked_amount.read() - amount);
+            } else {
+                option.amount -= amount;
+                self.total_locked_amount.write(self.total_locked_amount.read() - amount);
+            }
+            
+            // Transfer tokens to buyer
+            let amount_felt: felt252 = amount.try_into().unwrap();
+            self.token.read().transfer(caller, amount_felt);
+
+            self.options.write(option_id, option);
+        }
     }
 }
  
