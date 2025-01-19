@@ -46,10 +46,10 @@ pub trait ISimpleVault<TContractState> {
 
     fn create_option(ref self: TContractState, strike_price: u256, expiry_blocks: u64, amount: u256) -> u256;
     fn exercise_option(ref self: TContractState, option_id: u256, amount: u256);
-    // fn cancel_option(ref self: TContractState, option_id: u256);
-    // fn get_option_details(self: @TContractState, option_id: u256) -> Option;
-    // fn get_next_option_id(self: @TContractState) -> u256;
-    // fn get_total_locked_amount(self: @TContractState) -> u256;
+    fn cancel_option(ref self: TContractState, option_id: u256);
+    fn get_option_details(self: @TContractState, option_id: u256) -> VaultOption;
+    fn get_next_option_id(self: @TContractState) -> u256;
+    fn get_total_locked_amount(self: @TContractState) -> u256;
 }
  
 #[starknet::contract]
@@ -196,6 +196,65 @@ pub mod SimpleVault {
               self.total_locked_amount.write(current_locked + amount);
             return option_id;
         }
+
+        fn exercise_option(ref self: ContractState, option_id: u256, amount: u256) {
+            // TODO: Implement option exercise logic
+            // This is a placeholder implementation
+            // println!("Exercise option: {} {}", option_id, amount);
+
+            let mut option = self.options.read(option_id);
+            assert(!option.exercised, 'Option already exercised');
+            assert(!option.cancelled, 'Option cancelled');
+            
+            let current_block = get_block_number();
+
+            assert(
+                current_block <= option.creation_block + option.expiry_blocks,
+                'Option expired'
+            );
+
+            let caller = get_caller_address();
+            assert(amount <= option.amount, 'Amount exceeds option size');
+
+
+            let payment = amount * option.strike_price;
+            let payment_felt: felt252 = payment.try_into().unwrap();
+            let this = get_contract_address();
+
+            self.token.read().transfer_from(caller, this, payment_felt);
+
+
+                        // Update option state
+                        if amount == option.amount {
+                            option.exercised = true;
+                            self.total_locked_amount.write(self.total_locked_amount.read() - amount);
+                        } else {
+                            option.amount -= amount;
+                            self.total_locked_amount.write(self.total_locked_amount.read() - amount);
+                        }
+                        self.options.write(option_id, option);
+        }
+
+        fn cancel_option(ref self: ContractState, option_id: u256) {
+            let mut option = self.options.read(option_id);
+            assert(!option.exercised, 'Option already exercised');
+            assert(!option.cancelled, 'Option already cancelled');
+        }
+
+        fn get_option_details(self: @ContractState, option_id: u256) -> VaultOption {
+            self.options.read(option_id)
+        }
+
+        fn get_next_option_id(self: @ContractState) -> u256 {
+            self.next_option_id.read()
+        }
+
+        fn get_total_locked_amount(self: @ContractState) -> u256 {
+            self.total_locked_amount.read()
+        }
+      
+
+        
     }
 }
  
