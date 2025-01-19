@@ -33,7 +33,7 @@ async function main() {
   let sierraCode, casmCode;
 
   try {
-    ({ sierraCode, casmCode } = await getCompiledCode(`game_winter`));
+    ({ sierraCode, casmCode } = await getCompiledCode(`game_SimpleVault`));
     console.log("sierraCode=", sierraCode);
     console.log("casmCode=", casmCode);
   } catch (error: any) {
@@ -42,13 +42,19 @@ async function main() {
   }
 
   const initialOwner = deployerAddress;
+  const myCallData = new CallData(sierraCode.abi);
 
+
+  const constructor = myCallData.compile("constructor", {
+    token:"0x69f9e638ea1cbdd33f85c2dafb09585b10d65b996d15898a419f93e30577ca0"
+  });
 
 
   const deployResponse = await account0.declareAndDeploy({
     contract: sierraCode,
     casm: casmCode,
     salt: stark.randomAddress(),
+    constructorCalldata: constructor,
   });
 
   const contractAddress = deployResponse.deploy.contract_address;

@@ -1,41 +1,103 @@
+use starknet::ContractAddress;
+
 #[starknet::interface]
-pub trait Iwinter<TContractState> {
-    fn getX(self: @TContractState) -> felt252;
-    fn moveX(ref self: TContractState) -> felt252;
-    fn moveY(ref self: TContractState) -> felt252;
-    fn moveBoth(ref self: TContractState, x: felt252, y: felt252) -> felt252;
+trait IERC20<TContractState> {
+    fn get_name(self: @TContractState) -> felt252;
+    fn get_symbol(self: @TContractState) -> felt252;
+    fn get_decimals(self: @TContractState) -> u8;
+    fn get_total_supply(self: @TContractState) -> felt252;
+    fn balance_of(self: @TContractState, account: ContractAddress) -> felt252;
+    fn allowance(self: @TContractState, owner: ContractAddress, spender: ContractAddress) -> felt252;
+    fn transfer(ref self: TContractState, recipient: ContractAddress, amount: felt252) -> bool;
+    fn transfer_from(ref self: TContractState, sender: ContractAddress, recipient: ContractAddress, amount: felt252) -> bool;
+    fn approve(ref self: TContractState, spender: ContractAddress, amount: felt252) -> bool;
+}
+
+#[starknet::interface]
+trait IVault<TContractState> {
+    fn deposit(ref self: TContractState, amount: u256) -> bool;
+    fn withdraw(ref self: TContractState, amount: u256) -> bool;
+    fn get_balance(self: @TContractState, account: ContractAddress) -> u256;
+    fn get_total_deposits(self: @TContractState) -> u256;
 }
 
 #[starknet::contract]
-mod winter {
-    use core::starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
+mod Vault {
+    use super::{IERC20Dispatcher, IERC20DispatcherTrait};
+    use starknet::{ContractAddress, get_caller_address, get_contract_address};
+    use starknet::storage::Map;
 
     #[storage]
     struct Storage {
-        x: felt252,
-        y: felt252
+        strk_token: IERC20Dispatcher,
+        balances: Map::<ContractAddress, u256>,
+        total_deposits: u256,
+    }
+
+    #[constructor]
+    fn constructor(ref self: ContractState, strk_address: ContractAddress) {
+        self.strk_token.write(IERC20Dispatcher { contract_address: strk_address });
+        self.total_deposits.write(0);
     }
 
     #[abi(embed_v0)]
-    impl winterImpl of super::Iwinter<ContractState> {
-        fn getX(self: @ContractState) -> felt252 {
-            self.x.read()
+    impl Vault of super::IVault<ContractState> {
+        fn deposit(ref self: ContractState, amount: u256) -> bool {
+            let caller = get_caller_address();
+            let vault = get_contract_address();
+            let amount_felt: felt252 = amount.try_into().unwrap();
+
+            // Transfer STRK tokens from user to vault
+            let transfer_success = self.strk_token.read().transfer_from(caller, vault, amount_felt);
+            assert(transfer_success, 'Transfer failed');
+
+            // Update user balance and total deposits
+            let current_balance = self.balances.read(caller);
+            self.balances.write(caller, current_balance + amount);
+            
+            let current_total = self.total_deposits.read();
+            self.total_deposits.write(current_total + amount);
+
+            true
         }
 
-        fn moveX(ref self: ContractState) -> felt252 {
-            self.x.write(self.x.read() + 1);
-            self.x.read()
+        fn withdraw(ref self: ContractState, amount: u256) -> bool {
+            let caller = get_caller_address();
+            let current_balance = self.balances.read(caller);
+            assert(current_balance >= amount, 'Insufficient balance');
+
+            // Update user balance and total deposits
+            self.balances.write(caller, current_balance - amount);
+            let current_total = self.total_deposits.read();
+            self.total_deposits.write(current_total - amount);
+
+            // Transfer STRK tokens back to user
+            let amount_felt: felt252 = amount.try_into().unwrap();
+            let transfer_success = self.strk_token.read().transfer(caller, amount_felt);
+            assert(transfer_success, 'Transfer failed');
+
+            true
         }
 
-        fn moveY(ref self: ContractState) -> felt252 {
-            self.y.write(self.y.read() - 1);
-            self.y.read()
+        fn get_balance(self: @ContractState, account: ContractAddress) -> u256 {
+            self.balances.read(account)
         }
 
-        fn moveBoth(ref self: ContractState, x: felt252, y: felt252) -> felt252 {
-            self.x.write(self.x.read() + x);
-            self.y.write(self.y.read() + y);
-            self.x.read()
+        fn get_total_deposits(self: @ContractState) -> u256 {
+            self.total_deposits.read()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Vault, IVaultDispatcher, IVaultDispatcherTrait};
+    use starknet::{ContractAddress, contract_address_const};
+    use starknet::testing::{set_caller_address, set_contract_address};
+
+    #[test]
+    fn test_deposit_withdraw() {
+        // Test implementation would go here
+        // Would need to mock STRK token contract and test deposit/withdraw flows
     }
 }

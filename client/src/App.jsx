@@ -10,7 +10,6 @@ import Navbar from "./Components/Navbar";
 function App() {
   const [count, setCount] = useState(0);
   const connection = useSelector((state) => state.connection);
-
   const movementX = async () => {
     const provider = new RpcProvider({
       nodeUrl:
@@ -27,9 +26,21 @@ function App() {
     const address = connection.address;
     console.log("wallet address", address);
     console.log("contract details", newContract);
-    const response = await newContract.approve("0x015f8afd7ccaf2e33cc8b340416f29037ff8d03620f6bd7311939b01a04eec4d", 1);
-    console.log(">> response", response);
-  };
+
+    // Convert amount to uint256 format
+    const amount = {
+      low: 1n,
+      high: 0n
+    };
+
+    try {
+      const tx = await newContract.deposit(1000000000000);
+      console.log(">> tx", tx);
+      console.log(">> txHash", tx.transaction_hash);
+    } catch (error) {
+      console.error("Transaction failed:", error);
+    }
+  }
 
   const movementY = async () => {
     const provider = new RpcProvider({
@@ -47,8 +58,14 @@ function App() {
     const address = connection.address;
     console.log("wallet address", address);
     console.log("contract details", newContract);
-    const response = await newContract.moveY();
-    console.log(">> response", response);
+
+    try {
+      const tx = await newContract.withdraw(1);
+      console.log(">> tx", tx);
+      console.log(">> txHash", tx.transaction_hash);
+    } catch (error) {
+      console.error("Transaction failed:", error);
+    }
   };
 
   const getValue = async () => {

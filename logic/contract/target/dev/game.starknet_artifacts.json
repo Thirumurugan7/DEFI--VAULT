@@ -1,1 +1,1 @@
-{"version":1,"contracts":[{"id":"gk2ss7cno49k0","package_name":"game","contract_name":"SimpleVaultFactory","module_path":"game::winter::SimpleVaultFactory","artifacts":{"sierra":"game_SimpleVaultFactory.contract_class.json","casm":"game_SimpleVaultFactory.compiled_contract_class.json"}}]}
+{"version":1,"contracts":[{"id":"20ucfgca67i6c","package_name":"game","contract_name":"SimpleVault","module_path":"game::Vault::SimpleVault","artifacts":{"sierra":"game_SimpleVault.contract_class.json","casm":"game_SimpleVault.compiled_contract_class.json"}}]}
